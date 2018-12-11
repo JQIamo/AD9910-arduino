@@ -14,60 +14,66 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 #include "Arduino.h"
 #include "SPI.h"
 #include "AD9910.h"
 #include <math.h>
-
 
 /* CONSTRUCTOR */
 
 // Constructor function; initializes communication pinouts
 AD9910::AD9910(int ssPin, int resetPin, int updatePin, int ps0, int ps1, int ps2, int osk) // reset = master reset
 {
-    RESOLUTION  = 4294967296.0;
-    _ssPin = ssPin;
-    _resetPin = resetPin;
-    _updatePin = updatePin;
-    _ps0 = ps0;
-    _ps1 = ps1;
-    _ps2 = ps2;
-    _osk = osk;
-
-
-
+  RESOLUTION  = 4294967296.0;
+  _ssPin = ssPin;
+  _resetPin = resetPin;
+  _updatePin = updatePin;
+  _ps0 = ps0;
+  _ps1 = ps1;
+  _ps2 = ps2;
+  _osk = osk;
+  _fancy = 1; // flag to keep track of extra functionality
 }
 
-    /* PUBLIC CLASS FUNCTIONS */
+// alternate constructor function; initializes communication pinouts
+AD9910::AD9910(int ssPin, int resetPin, int updatePin, int ps0) // reset = master reset
+{
+  RESOLUTION  = 4294967296.0;
+  _ssPin = ssPin;
+  _resetPin = resetPin;
+  _updatePin = updatePin;
+  _ps0 = ps0;
+  _fancy = 0; // flag to keep track of extra functionality
+}
 
+/* PUBLIC CLASS FUNCTIONS */
 
 // initialize(refClk) - initializes DDS with reference freq, divider
 void AD9910::begin(unsigned long ref, uint8_t divider){
+  // sets up the pinmodes for output
+  pinMode(_ssPin, OUTPUT);
+  pinMode(_resetPin, OUTPUT);
+  pinMode(_updatePin, OUTPUT);
+  pinMode(_ps0, OUTPUT);
+  if (_fancy == 1){
+    pinMode(_ps1, OUTPUT);
+    pinMode(_ps2, OUTPUT);
+    pinMode(_osk, OUTPUT);
+  }
+  // defaults for pin logic levels
+  digitalWrite(_ssPin, HIGH);
+  digitalWrite(_resetPin, LOW);
+  digitalWrite(_updatePin, LOW);
+  digitalWrite(_ps0, LOW);
+  if (_fancy == 1){
+    digitalWrite(_ps1, LOW);
+    digitalWrite(_ps2, LOW);
+    digitalWrite(_osk, LOW);
+  }
 
-    // sets up the pinmodes for output
-    pinMode(_ssPin, OUTPUT);
-    pinMode(_resetPin, OUTPUT);
-    pinMode(_updatePin, OUTPUT);
-    pinMode(_ps0, OUTPUT);
-    //pinMode(_ps1, OUTPUT);
-    //pinMode(_ps2, OUTPUT);
-    //pinMode(_osk, OUTPUT);
+  _refClk = ref*divider;
 
-    // defaults for pin logic levels
-    digitalWrite(_ssPin, HIGH);
-    digitalWrite(_resetPin, LOW);
-    digitalWrite(_updatePin, LOW);
-    digitalWrite(_ps0, LOW);
-    //digitalWrite(_ps1, LOW);
-    //digitalWrite(_ps2, LOW);
-    //digitalWrite(_osk, LOW);
-
-    _refClk = ref*divider;
-
-
-    AD9910::reset();
-
+  AD9910::reset();
 
   delay(1);
 
@@ -78,89 +84,71 @@ void AD9910::begin(unsigned long ref, uint8_t divider){
   cfr2.data.bytes[2] = 0x00;  // sync_clk pin disabled; not used
   cfr2.data.bytes[3] = 0x01;  // enable ASF
 
+  reg_t cfr3;
+  cfr3.addr = 0x02;
+  cfr3.data.bytes[0] = divider << 1; // pll divider
+  if (divider == 0){
+    cfr3.data.bytes[1] = 0x40;    // bypass pll
+    cfr3.data.bytes[3] = 0x07;
+  } else {
+    cfr3.data.bytes[1] = 0x41;    // enable PLL
+    cfr3.data.bytes[3] = 0x05;
+  }
+  cfr3.data.bytes[2] = 0x3F;
 
+  reg_t auxdac;
+  auxdac.addr = 0x03;
+  auxdac.data.bytes[0] = 0xFF;
 
-    reg_t cfr3;
-    cfr3.addr = 0x02;
-    cfr3.data.bytes[0] = divider << 1; // pll divider
-    if (divider == 0){
-        cfr3.data.bytes[1] = 0x40;    // bypass pll
-        cfr3.data.bytes[3] = 0x07;
-    } else {
-        cfr3.data.bytes[1] = 0x41;    // enable PLL
-        cfr3.data.bytes[3] = 0x05;
-    }
-    cfr3.data.bytes[2] = 0x3F;
+  writeRegister(cfr2);
+  writeRegister(cfr3);
+  writeRegister(auxdac);
+  update();
 
-    reg_t auxdac;
-    auxdac.addr = 0x03;
-    auxdac.data.bytes[0] = 0xFF;
+  delay(1);
 
-
-    writeRegister(cfr2);
-    writeRegister(cfr3);
-    writeRegister(auxdac);
-    update();
-
-    delay(1);
-
-    _profileModeOn = false; //profile mode is disabled by default
-    _OSKon = false; //OSK is disabled by default
-
-    _activeProfile = 0;
-
+  _profileModeOn = false; //profile mode is disabled by default
+  _OSKon = false; //OSK is disabled by default
+  _activeProfile = 0;
 
 }
 
 // reset() - takes no arguments; resets DDS
 void AD9910::reset(){
-    digitalWrite(_resetPin, HIGH);
-    delay(1);
-    digitalWrite(_resetPin, LOW);
+  digitalWrite(_resetPin, HIGH);
+  delay(1);
+  digitalWrite(_resetPin, LOW);
 }
 
 // update() - sends a logic pulse to IO UPDATE pin on DDS; updates frequency output to
 //      newly set frequency (FTW0)
 void AD9910::update(){
-    digitalWrite(_updatePin, HIGH);
-    delay(1);
-    digitalWrite(_updatePin, LOW);
+  digitalWrite(_updatePin, HIGH);
+  delay(1);
+  digitalWrite(_updatePin, LOW);
 }
 
 // setFreq(freq) -- writes freq to DDS board, in FTW0
 void AD9910::setFreq(uint32_t freq, uint8_t profile){
+  if (profile > 7) {
+    return; //invalid profile, return without doing anything
+  }
+  // set _freq and _ftw variables
+  _freq[profile] = freq;
+  _ftw[profile] = round(freq * RESOLUTION / _refClk) ;
 
-    if (profile > 7) {
-        return; //invalid profile, return without doing anything
-    }
-
-    // set _freq and _ftw variables
-    _freq[profile] = freq;
-    _ftw[profile] = round(freq * RESOLUTION / _refClk) ;
-
-    reg_t payload;
-    payload.bytes = 8;
-    payload.addr = 0x0E + profile;
-    payload.data.block[0] =  _ftw[profile];
-
-    // need to write a way around updating the amplitude/phase words to default here...
-    //
-    payload.data.block[1] = 0x3FFF0000;
-
-
-
-
-
-
-
-
-
+  reg_t payload;
+  payload.bytes = 8;
+  payload.addr = 0x0E + profile;
+  payload.data.block[0] =  _ftw[profile];
+  // need to write a way around updating the amplitude/phase words to default here...
+  //
+  payload.data.block[1] = 0x3FFF0000;
 	// actually writes to register
-    //AD9910::writeRegister(CFR1Info, CFR1);
-    writeRegister(payload);
-    update();
+  //AD9910::writeRegister(CFR1Info, CFR1);
+  writeRegister(payload);
+  update();
 }
-
 
 /*
 void AD9910::setAmp(double scaledAmp, byte profile){
@@ -389,17 +377,15 @@ byte AD9910::getProfile() {
 // Writes SPI to particular register.
 //      registerInfo is a 2-element array which contains [register, number of bytes]
 void AD9910::writeRegister(reg_t payload){
-    SPI.beginTransaction(SPISettings(CLOCKSPEED, MSBFIRST, SPI_MODE0));
-
-    digitalWrite(_ssPin, LOW);
-    SPI.transfer(payload.addr);
-    // MSB
-    for (int i = payload.bytes; i > 0; i--){
-        SPI.transfer(payload.data.bytes[i-1]);
-    }
-    digitalWrite(_ssPin, HIGH);
-
-    SPI.endTransaction();
+  SPI.beginTransaction(SPISettings(CLOCKSPEED, MSBFIRST, SPI_MODE0));
+  digitalWrite(_ssPin, LOW);
+  SPI.transfer(payload.addr);
+  // MSB
+  for (int i = payload.bytes; i > 0; i--){
+    SPI.transfer(payload.data.bytes[i-1]);
+  }
+  digitalWrite(_ssPin, HIGH);
+  SPI.endTransaction();
 }
 
 /* PRIVATE CLASS FUNCTIONS */
