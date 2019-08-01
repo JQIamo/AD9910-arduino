@@ -27,7 +27,8 @@ class AD9910
 {
   typedef union {
     uint8_t bytes[8] = {0};
-    uint32_t block[2];
+    uint16_t words[4];
+    uint32_t dwords[2];
   } data_t;
 
   typedef struct {
@@ -54,9 +55,9 @@ class AD9910
     unsigned long getFTW(uint8_t profile = 0);
     // Sets frequency tuning word
     void setFTW(unsigned long ftw, uint8_t profile = 0);
-/*  *********************** to implement later ***************
     //write scaled amplitude for the selected profile
     void setAmp(double scaledAmp, uint8_t profile = 0);
+/*  *********************** to implement later ***************
     void setAmpdB(double scaledAmpdB, uint8_t profile = 0);
     // Gets current amplitude
     double getAmp(uint8_t profile = 0);
@@ -66,27 +67,21 @@ class AD9910
     unsigned long getASF(uint8_t profile = 0);
     // places DDS in linear sweep mode
     //void linearSweep(unsigned long, unsigned long, unsigned long, byte, unsigned long, byte);
-    //enable profile mode
-    void enableProfileMode();
-    //disable profile mode
-    void disableProfileMode();
     //enable OSK
     void enableOSK();
     //disable OSK
     void disableOSK();
-    //Get profile mode status
-    bool getProfileSelectMode();
     //Get OSK mode status
     bool getOSKMode();
     //enable the Sync Clck output
     void enableSyncClck();
     //disable the Sync Clck output
     void disableSyncClck();
+*/
     //Change active profile mode:
     void selectProfile(byte);
     //Get currently active profile
     uint8_t getProfile();
-*/
     void writeRegister(reg_t payload);
 
   private:
@@ -99,7 +94,7 @@ class AD9910
     double _scaledAmp[8], _scaledAmpdB[8];
     uint8_t _activeProfile;
     // Instance variables to keep track of the DDS mode:
-    bool _profileModeOn, _OSKon;
+    bool _OSKon;
     // write amplitude tuning word to device
     //void writeAmp(long ampScaleFactor, uint8_t profile);
     // DDS frequency resolution

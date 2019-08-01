@@ -78,11 +78,11 @@ void AD9910::begin(unsigned long ref, uint8_t divider){
   delay(1);
 
   reg_t cfr2;
-  cfr2.addr = 0x02;
-  cfr2.data.bytes[0] = 0x02;
-  cfr2.data.bytes[1] = 0x08;
+  cfr2.addr = 0x01;           // This was 0x02 which would never work
+  cfr2.data.bytes[0] = 0x20;  // AMH Change back to default
+  cfr2.data.bytes[1] = 0x08;  // AMH PDCLK is enbaled, but doesn't need to be long term.  Use it for debugging, then turn it off.
   cfr2.data.bytes[2] = 0x00;  // sync_clk pin disabled; not used
-  cfr2.data.bytes[3] = 0x01;  // enable ASF
+  cfr2.data.bytes[3] = 0x01;  // enable ASF from single tone profile
 
   reg_t cfr3;
   cfr3.addr = 0x02;
@@ -92,13 +92,14 @@ void AD9910::begin(unsigned long ref, uint8_t divider){
     cfr3.data.bytes[3] = 0x07;
   } else {
     cfr3.data.bytes[1] = 0x41;    // enable PLL
-    cfr3.data.bytes[3] = 0x05;
+    cfr3.data.bytes[3] = 0x05;    // AMH: Currently VCO5, which covers highest sample rate of 1GSa/s, but should be dynamically set based on target PLL frequency
+                                  // AMH: also REFCLK_OUT disabled
   }
   cfr3.data.bytes[2] = 0x3F;
 
   reg_t auxdac;
   auxdac.addr = 0x03;
-  auxdac.data.bytes[0] = 0xFF;
+  auxdac.data.bytes[0] = 0xFF; // AMH: This will push to the part to its max specified full scale output current of 31.6 mA with an RSET of 10k
 
   writeRegister(cfr2);
   writeRegister(cfr3);
@@ -107,7 +108,6 @@ void AD9910::begin(unsigned long ref, uint8_t divider){
 
   delay(1);
 
-  _profileModeOn = false; //profile mode is disabled by default
   _OSKon = false; //OSK is disabled by default
   _activeProfile = 0;
 
@@ -140,18 +140,18 @@ void AD9910::setFreq(uint32_t freq, uint8_t profile){
   reg_t payload;
   payload.bytes = 8;
   payload.addr = 0x0E + profile;
-  payload.data.block[0] =  _ftw[profile];
-  // need to write a way around updating the amplitude/phase words to default here...
-  //
-  payload.data.block[1] = 0x3FFF0000;
+  payload.data.dwords[0] =  _ftw[profile];
+  payload.data.words[3] = 0x0000; // Phase = 0
+  payload.data.words[4] = _asf[profile];
 	// actually writes to register
-  //AD9910::writeRegister(CFR1Info, CFR1);
   writeRegister(payload);
   update();
+
+  selectProfile(profile);
 }
 
-/*
 void AD9910::setAmp(double scaledAmp, byte profile){
+  // Later check for manual OSK set and manipulate register 0x09 for that case
    if (profile > 7) {
         return; //invalid profile, return without doing anything
    }
@@ -166,14 +166,20 @@ void AD9910::setAmp(double scaledAmp, byte profile){
       _asf[profile]=0; //write min value
    }
 
-   AD9910::writeAmp(_asf[profile],profile);
+   reg_t payload;
+   payload.bytes = 8;
+   payload.addr = 0x0E + profile;
+   payload.data.dwords[0] =  _ftw[profile];
+   payload.data.words[3] = 0x0000; // Phase = 0
+   payload.data.words[4] = _asf[profile];
+	// actually writes to register
+  writeRegister(payload);
+  update();
 
+  selectProfile(profile);
 }
 
-void AD9910::setAmp(double scaledAmp){
-  AD9910::setAmp(scaledAmp,0);
-}
-
+/*
 void AD9910::setAmpdB(double scaledAmpdB, byte profile){
   if (profile > 7) {
         return; //invalid profile, return without doing anything
@@ -277,26 +283,6 @@ void AD9910::setFTW(unsigned long ftw, byte profile){
 //   AD9910::setFTW(ftw,0);
 // }
 
-//Enable the profile select mode
-void AD9910::enableProfileMode() {
-  //write 0x01, byte 23 high
-  _profileModeOn = true;
-  byte registerInfo[] = {0x01, 4};
-  byte data[] = {0x00, 0x80, 0x09, 0x00};
-  AD9910::writeRegister(registerInfo, data);
-  AD9910::update();
-}
-
-//Disable the profile select mode
-void AD9910::disableProfileMode() {
-  //write 0x01, byte 23 low
-  _profileModeOn = false;
-  byte registerInfo[] = {0x01, 4};
-  byte data[] = {0x00, 0x00, 0x09, 0x00};
-  AD9910::writeRegister(registerInfo, data);
-  AD9910::update();
-}
-
 //enable OSK
 void AD9910::enableOSK(){
   //write 0x00, byte 8 high
@@ -315,11 +301,6 @@ void AD9910::disableOSK(){
   byte data[] = {0x00, 0x01, 0x00, 0x08};
   AD9910::writeRegister(registerInfo, data);
   AD9910::update();
-}
-
-//return boolean indicating if profile select mode is activated
-boolean AD9910::getProfileSelectMode() {
-  return _profileModeOn;
 }
 
 //return boolean indicating if OSK mode is activated
@@ -342,6 +323,8 @@ void AD9910::disableSyncClck() {
   AD9910::writeRegister(registerInfo, data);
   AD9910::update();
 }
+
+*/
 
 void AD9910::selectProfile(byte profile){
   //Possible improvement: write PS pin states all at once using register masks
@@ -372,7 +355,6 @@ void AD9910::selectProfile(byte profile){
 byte AD9910::getProfile() {
   return _activeProfile;
 }
-*/
 
 // Writes SPI to particular register.
 //      registerInfo is a 2-element array which contains [register, number of bytes]
