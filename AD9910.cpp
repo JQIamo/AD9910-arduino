@@ -80,8 +80,8 @@ void AD9910::begin(unsigned long ref, uint8_t divider){
   reg_t cfr2;
   cfr2.addr = 0x01;           // This was 0x02 which would never work
   cfr2.data.bytes[0] = 0x20;  // AMH Change back to default
-  cfr2.data.bytes[1] = 0x08;  // AMH PDCLK is enbaled, but doesn't need to be long term.  Use it for debugging, then turn it off.
-  cfr2.data.bytes[2] = 0x00;  // sync_clk pin disabled; not used
+  cfr2.data.bytes[1] = 0x00;  // PDCLK disabled; not used
+  cfr2.data.bytes[2] = 0x00;  // SYNC_CLK pin disabled; not used
   cfr2.data.bytes[3] = 0x01;  // enable ASF from single tone profile
 
   reg_t cfr3;
@@ -100,6 +100,7 @@ void AD9910::begin(unsigned long ref, uint8_t divider){
   reg_t auxdac;
   auxdac.addr = 0x03;
   auxdac.data.bytes[0] = 0xFF; // AMH: This will push to the part to its max specified full scale output current of 31.6 mA with an RSET of 10k
+  //auxdac.data.bytes[0] = 0x3F;    // AMH: Dial back to default instead
 
   writeRegister(cfr2);
   writeRegister(cfr3);
@@ -141,8 +142,8 @@ void AD9910::setFreq(uint32_t freq, uint8_t profile){
   payload.bytes = 8;
   payload.addr = 0x0E + profile;
   payload.data.dwords[0] =  _ftw[profile];
-  payload.data.words[3] = 0x0000; // Phase = 0
-  payload.data.words[4] = _asf[profile];
+  payload.data.words[2] = 0x0000; // Phase = 0
+  payload.data.words[3] = _asf[profile];
 	// actually writes to register
   writeRegister(payload);
   update();
@@ -170,8 +171,8 @@ void AD9910::setAmp(double scaledAmp, byte profile){
    payload.bytes = 8;
    payload.addr = 0x0E + profile;
    payload.data.dwords[0] =  _ftw[profile];
-   payload.data.words[3] = 0x0000; // Phase = 0
-   payload.data.words[4] = _asf[profile];
+   payload.data.words[2] = 0x0000; // Phase = 0
+   payload.data.words[3] = _asf[profile];
 	// actually writes to register
   writeRegister(payload);
   update();
