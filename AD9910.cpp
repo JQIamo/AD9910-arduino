@@ -78,8 +78,8 @@ void AD9910::begin(unsigned long ref, uint8_t divider){
   delay(1);
 
   reg_t cfr2;
-  cfr2.addr = 0x01;           // This was 0x02 which would never work
-  cfr2.data.bytes[0] = 0x20;  // AMH Change back to default
+  cfr2.addr = 0x01;
+  cfr2.data.bytes[0] = 0x20;
   cfr2.data.bytes[1] = 0x00;  // PDCLK disabled; not used
   cfr2.data.bytes[2] = 0x00;  // SYNC_CLK pin disabled; not used
   cfr2.data.bytes[3] = 0x01;  // enable ASF from single tone profile
@@ -92,15 +92,22 @@ void AD9910::begin(unsigned long ref, uint8_t divider){
     cfr3.data.bytes[3] = 0x07;
   } else {
     cfr3.data.bytes[1] = 0x41;    // enable PLL
-    cfr3.data.bytes[3] = 0x05;    // AMH: Currently VCO5, which covers highest sample rate of 1GSa/s, but should be dynamically set based on target PLL frequency
-                                  // AMH: also REFCLK_OUT disabled
+    // Search for closest VCO
+    uint32_t err = ULONG_MAX;
+    uint8_t vco = 0;
+    for (int i = 0; i < 6; i++){
+      if (abs(_refClk-_vcoMid[i]) < err){
+        vco = i;
+      }
+    }
+    
+    cfr3.data.bytes[3] = vco;
   }
   cfr3.data.bytes[2] = 0x3F;
 
   reg_t auxdac;
   auxdac.addr = 0x03;
-  auxdac.data.bytes[0] = 0xFF; // AMH: This will push to the part to its max specified full scale output current of 31.6 mA with an RSET of 10k
-  //auxdac.data.bytes[0] = 0x3F;    // AMH: Dial back to default instead
+  auxdac.data.bytes[0] = 0xFF;
 
   writeRegister(cfr2);
   writeRegister(cfr3);
@@ -152,7 +159,6 @@ void AD9910::setFreq(uint32_t freq, uint8_t profile){
 }
 
 void AD9910::setAmp(double scaledAmp, byte profile){
-  // Later check for manual OSK set and manipulate register 0x09 for that case
    if (profile > 7) {
         return; //invalid profile, return without doing anything
    }

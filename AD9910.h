@@ -99,6 +99,7 @@ class AD9910
     //void writeAmp(long ampScaleFactor, uint8_t profile);
     // DDS frequency resolution
     double RESOLUTION;// = 4294967296; // sets resolution to 2^32 = 32 bits. Using type double to avoid confusion with integer division...
+    const uint32_t _vcoMid[6] = { 440000000, 505000000, 600000000, 740000000, 825000000, 985000000 };
 };
 
 #endif
